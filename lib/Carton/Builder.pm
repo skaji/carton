@@ -2,11 +2,10 @@ package Carton::Builder;
 use strict;
 use Class::Tiny {
     mirror => undef,
-    index  => undef,
     cascade => sub { 1 },
     without => sub { [] },
     cpanfile => undef,
-    fatscript => sub { $_[0]->_build_fatscript },
+    snapshot => undef,
 };
 
 sub effective_mirrors {
@@ -47,68 +46,55 @@ sub bundle {
 sub install {
     my($self, $path) = @_;
 
-    $self->run_cpanm(
+    my @option = (
+        "install",
         "-L", $path,
+        "--cpanfile", $self->cpanfile->path->stringify
         (map { ("--mirror", $_->url) } $self->effective_mirrors),
-        ( $self->index ? ("--mirror-index", $self->index) : () ),
-        ( $self->cascade ? "--cascade-search" : () ),
-        ( $self->custom_mirror ? "--mirror-only" : () ),
-        "--save-dists", "$path/cache",
-        $self->groups,
-        "--cpanfile", $self->cpanfile,
-        "--installdeps", $self->cpanfile->dirname,
-    ) or die "Installing modules failed\n";
+    );
+    if ($self->snapshot) {
+        push @option, (
+            "--snapshot" => $self->snapshot->path->stringify,
+            "--resolver", "snapshot",
+        );
+    }
+    if ($self->cascade) {
+        push @option, "--resolver", "metadb";
+    }
+    push @option, $self->groups;
+
+    $self->run_cpm(@option)
+        or die "Installing modules failed\n";
 }
 
 sub groups {
     my $self = shift;
-
-    # TODO support --without test (don't need test on deployment)
-    my @options = ('--with-all-features', '--with-develop');
-
-    for my $group (@{$self->without}) {
-        push @options, '--without-develop' if $group eq 'develop';
-        push @options, "--without-feature=$group";
+    my @without = @{$self->without};
+    if (grep { $_ eq 'develop' } @{$self->without}) {
+        return;
+    } else {
+        return ("--with-develop");
     }
-
-    return @options;
 }
 
 sub update {
     my($self, $path, @modules) = @_;
 
-    $self->run_cpanm(
+    $self->run_cpm(
+        "install",
         "-L", $path,
         (map { ("--mirror", $_->url) } $self->effective_mirrors),
-        ( $self->custom_mirror ? "--mirror-only" : () ),
-        "--save-dists", "$path/cache",
+        "--resolver", "metadb",
         @modules
     ) or die "Updating modules failed\n";
 }
 
-sub _build_fatscript {
-    my $self = shift;
-
-    my $fatscript;
-    if ($Carton::Fatpacked) {
-        require Module::Reader;
-        my $content = Module::Reader::module_content('App::cpanminus::fatscript')
-            or die "Can't locate App::cpanminus::fatscript";
-        $fatscript = Path::Tiny->tempfile;
-        $fatscript->spew($content);
-    } else {
-        require Module::Metadata;
-        $fatscript = Module::Metadata->find_module_by_name("App::cpanminus::fatscript")
-            or die "Can't locate App::cpanminus::fatscript";
-    }
-
-    return $fatscript;
-}
-
-sub run_cpanm {
+sub run_cpm {
     my($self, @args) = @_;
-    local $ENV{PERL_CPANM_OPT};
-    !system $^X, $self->fatscript, "--quiet", "--notest", @args;
+    require App::cpm;
+    my $cpm = App::cpm->new;
+    my $exit = $cpm->run(@args);
+    return $exit == 0;
 }
 
 1;

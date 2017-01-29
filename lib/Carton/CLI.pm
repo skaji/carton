@@ -206,11 +206,7 @@ sub cmd_install {
 
     # TODO merge CPANfile git to mirror even if lock doesn't exist
     if ($env->snapshot->loaded) {
-        my $index_file = $env->install_path->child("cache/modules/02packages.details.txt");
-           $index_file->parent->mkpath;
-
-        $env->snapshot->write_index($index_file);
-        $builder->index($index_file);
+        $builder->snapshot($env->snapshot);
     }
 
     if ($cached) {

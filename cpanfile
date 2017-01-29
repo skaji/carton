@@ -14,7 +14,7 @@ requires 'Getopt::Long', 2.39;
 requires 'Class::Tiny', 1.001;
 requires 'Path::Tiny', 0.033;
 
-requires 'App::cpanminus', 1.7030;
+requires 'App::cpm', '0.299';
 
 requires 'CPAN::Meta', 2.120921;
 requires 'CPAN::Meta::Requirements', 2.121;
